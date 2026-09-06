@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+
+# next.js build output
+/.next/
+/out/
+/build/
+
+# environment
+.env
+.env.local
+.env*.local
+
+# generated code (regenerated via `prisma generate`)
+/src/generated/
+
+# local file storage (dev uploads)
+/storage/local/*
+!/storage/local/.gitkeep
+
+# test output
+/coverage/
+/coverage/*.json
+
+# misc
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+*.log
+npm-debug.log*
+.npm/
+
+# local tooling
+.vercel
+*.local

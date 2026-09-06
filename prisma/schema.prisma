@@ -1,0 +1,615 @@
+// Societal Innovation Collaboration Portal — Prisma schema (Phase 1)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CITIZEN
+  GOVERNMENT
+  ADMIN
+  UNIVERSITY_ADMIN
+  FACULTY
+  STUDENT
+  INDUSTRY
+  MENTOR
+}
+
+enum ChallengeStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  VALIDATION_REQUIRED
+  VALIDATED
+  REJECTED
+  MATCHING
+  ASSIGNED
+  ACCEPTED
+  IN_PROGRESS
+  PILOT
+  VALIDATION
+  IMPLEMENTED
+  RESOLVED
+  ARCHIVED
+}
+
+enum ChallengePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ChallengeDomain {
+  EDUCATION
+  HEALTHCARE
+  AGRICULTURE
+  WATER_RESOURCES
+  SANITATION
+  ENVIRONMENT
+  ENERGY
+  URBAN_DEVELOPMENT
+  ACCESSIBILITY
+  PUBLIC_ADMINISTRATION
+  RURAL_LIVELIHOODS
+  TRANSPORTATION
+  DIGITAL_SERVICES
+  DISASTER_MANAGEMENT
+  OTHER
+}
+
+enum EvidenceKind {
+  PHOTO
+  VIDEO
+  DOCUMENT
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum AssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ReviewDecision {
+  APPROVED
+  REJECTED
+  REQUIRES_MORE_INFO
+}
+
+enum NotificationType {
+  CHALLENGE_SUBMISSION
+  CHALLENGE_STATUS
+  CHALLENGE_ASSIGNMENT
+  PROJECT_INVITE
+  REVIEW_FEEDBACK
+  INDUSTRY_INTEREST
+  MILESTONE_EVENT
+  ADMIN_ACTION
+}
+
+enum ProjectStatus {
+  PROPOSAL
+  IN_PROGRESS
+  PILOT
+  VALIDATION
+  COMPLETED
+  ON_HOLD
+}
+
+enum MemberRole {
+  STUDENT
+  FACULTY
+  MENTOR
+}
+
+enum MilestoneStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum MilestoneApproval {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProposalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum IndustryCollaborationStatus {
+  INTERESTED
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  ACTIVE
+  COMPLETED
+}
+
+enum OrganizationType {
+  UNIVERSITY
+  GOVERNMENT_DEPARTMENT
+  INDUSTRY
+  STARTUP
+  MSME
+  CSR
+  RESEARCH_LAB
+  NGO
+  OTHER
+}
+
+// ─── Users, Sessions, Organizations ─────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(CITIZEN)
+  phone        String?
+  district     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions           Session[]
+  challenges         Challenge[]
+  reviews            ChallengeReview[]
+  assignmentsMade    ChallengeAssignment[]    @relation("Assigner")
+  statusHistory      ChallengeStatusHistory[]
+  projectsOwned      Project[]                @relation("ProjectOwner")
+  projectMemberships ProjectMember[]
+  proposals          Proposal[]
+  notifications      Notification[]
+  comments           Comment[]
+  documentsUploaded  Document[]               @relation("DocumentUploader")
+  documentsOwned     Document[]               @relation("DocumentOwner")
+  auditLogs          AuditLog[]
+  faculty            Faculty?
+  student            Student?
+  challengeEvidences ChallengeEvidence[]
+  milestones         Milestone[]
+
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Shared container for universities, government departments, industry
+// partners, startups, MSMEs, CSR bodies and research labs. Keeps the
+// relational model clean instead of one near-identical table per type.
+model Organization {
+  id      String           @id @default(cuid())
+  name    String
+  slug    String           @unique
+  orgType OrganizationType
+
+  description String?
+  location    String?
+  district    String?
+  website     String?
+
+  // Capability data used by matching/discovery.
+  disciplines           String[]
+  researchAreas         String[]
+  labs                  String[]
+  techCapabilities      String[]
+  innovationCentres     String[]
+  incubation            Boolean  @default(false)
+  sectors               String[]
+  expertise             String[]
+  technologies          String[]
+  fundingCapability     Boolean  @default(false)
+  mentorshipCapability  Boolean  @default(false)
+  prototypingCapability Boolean  @default(false)
+  deploymentCapability  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  departments          UniversityDepartment[]
+  faculty              Faculty[]
+  students             Student[]
+  assignedChallenges   Challenge[]             @relation("AssignedOrg")
+  challengeAssignments ChallengeAssignment[]
+  projects             Project[]
+  collaborations       IndustryCollaboration[]
+  proposals            Proposal[]
+
+  @@index([orgType])
+  @@index([district])
+}
+
+model UniversityDepartment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  disciplines    String[]
+  researchAreas  String[]
+
+  @@index([organizationId])
+}
+
+model Faculty {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  title          String?
+  expertise      String[]
+
+  @@index([organizationId])
+}
+
+model Student {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  program        String?
+
+  @@index([organizationId])
+}
+
+// ─── Challenge (central aggregate) ──────────────────────────────────────
+
+model Challenge {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  title            String
+  description      String
+  problemStatement String?
+
+  // Location — no paid map API required for Phase 1.
+  district    String
+  block       String?
+  villageWard String?
+  latitude    Float?
+  longitude   Float?
+
+  // Categorization (validated domains, Postgres arrays for secondary/tags).
+  primaryDomain    ChallengeDomain
+  secondaryDomains ChallengeDomain[]
+  tags             String[]
+
+  // Impact / urgency.
+  urgency            ChallengePriority @default(MEDIUM)
+  affectedPopulation String?
+  geographicScope    String?
+
+  // Workflow state.
+  status                 ChallengeStatus   @default(DRAFT)
+  priority               ChallengePriority @default(MEDIUM)
+  assignedOrganizationId String?
+  assignedOrganization   Organization?     @relation("AssignedOrg", fields: [assignedOrganizationId], references: [id], onDelete: SetNull)
+
+  submittedAt DateTime?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  evidence               ChallengeEvidence[]
+  reviews                ChallengeReview[]
+  assignments            ChallengeAssignment[]
+  statusHistory          ChallengeStatusHistory[]
+  projects               Project[]
+  proposals              Proposal[]
+  documents              Document[]
+  comments               Comment[]
+  industryCollaborations IndustryCollaboration[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([district])
+  @@index([primaryDomain])
+  @@index([userId])
+  @@index([assignedOrganizationId])
+  @@index([createdAt])
+  @@index([urgency])
+}
+
+// Metadata only — the bytes live behind the StorageService abstraction.
+model ChallengeEvidence {
+  id           String       @id @default(cuid())
+  challengeId  String
+  challenge    Challenge    @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  kind         EvidenceKind
+  storageKey   String       @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  visibility   Visibility   @default(PRIVATE)
+  uploadedById String?
+  uploadedBy   User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+
+  @@index([challengeId])
+}
+
+model ChallengeAssignment {
+  id             String           @id @default(cuid())
+  challengeId    String
+  challenge      Challenge        @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  status         AssignmentStatus @default(PENDING)
+  assignedById   String?
+  assignedBy     User?            @relation("Assigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([challengeId, organizationId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model ChallengeReview {
+  id          String             @id @default(cuid())
+  challengeId String
+  challenge   Challenge          @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  reviewerId  String
+  reviewer    User               @relation(fields: [reviewerId], references: [id], onDelete: Restrict)
+  decision    ReviewDecision
+  notes       String?
+  priority    ChallengePriority?
+  createdAt   DateTime           @default(now())
+
+  @@index([challengeId])
+  @@index([reviewerId])
+}
+
+model ChallengeStatusHistory {
+  id          String           @id @default(cuid())
+  challengeId String
+  challenge   Challenge        @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  fromStatus  ChallengeStatus?
+  toStatus    ChallengeStatus
+  changedById String?
+  changedBy   User?            @relation(fields: [changedById], references: [id], onDelete: SetNull)
+  note        String?
+  createdAt   DateTime         @default(now())
+
+  @@index([challengeId])
+}
+
+// ─── Projects ───────────────────────────────────────────────────────────
+
+model Project {
+  id             String        @id @default(cuid())
+  challengeId    String        @unique
+  challenge      Challenge     @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+  title          String
+  description    String?
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ownerId        String
+  owner          User          @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  status         ProjectStatus @default(PROPOSAL)
+
+  objectives       String?
+  methodology      String?
+  budget           Decimal? @db.Decimal(12, 2)
+  funding          Decimal? @db.Decimal(12, 2)
+  risks            String[]
+  deploymentStatus String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members        ProjectMember[]
+  milestones     Milestone[]
+  deliverables   Deliverable[]
+  proposals      Proposal[]
+  collaborations IndustryCollaboration[]
+  impactMetrics  ImpactMetric[]
+  documents      Document[]
+  comments       Comment[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model ProjectMember {
+  id        String     @id @default(cuid())
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role      MemberRole @default(STUDENT)
+  isLead    Boolean    @default(false)
+  joinedAt  DateTime   @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@index([role])
+}
+
+model Milestone {
+  id            String            @id @default(cuid())
+  projectId     String
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  startDate     DateTime?
+  dueDate       DateTime?
+  status        MilestoneStatus   @default(NOT_STARTED)
+  completionPct Int               @default(0)
+  approval      MilestoneApproval @default(PENDING)
+  reviewerId    String?
+  reviewer      User?             @relation(fields: [reviewerId], references: [id], onDelete: SetNull)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  deliverables Deliverable[]
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model Deliverable {
+  id          String          @id @default(cuid())
+  milestoneId String
+  milestone   Milestone       @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  storageKey  String?
+  status      MilestoneStatus @default(NOT_STARTED)
+  createdAt   DateTime        @default(now())
+  project     Project?        @relation(fields: [projectId], references: [id])
+  projectId   String?
+
+  @@index([milestoneId])
+}
+
+model Proposal {
+  id             String         @id @default(cuid())
+  challengeId    String
+  challenge      Challenge      @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  submittedById  String
+  submittedBy    User           @relation(fields: [submittedById], references: [id], onDelete: Restrict)
+  title          String
+  summary        String
+  status         ProposalStatus @default(DRAFT)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([challengeId])
+  @@index([status])
+}
+
+model IndustryCollaboration {
+  id             String                      @id @default(cuid())
+  organizationId String
+  organization   Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  challengeId    String?
+  challenge      Challenge?                  @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  status         IndustryCollaborationStatus @default(INTERESTED)
+  roles          String[]
+  notes          String?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([projectId])
+}
+
+model ImpactMetric {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key       String
+  value     Float
+  unit      String?
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+// ─── Notifications, Comments, Documents, Audit ─────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+model Comment {
+  id          String     @id @default(cuid())
+  authorId    String
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  challengeId String?
+  challenge   Challenge? @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  content     String
+  createdAt   DateTime   @default(now())
+
+  @@index([challengeId])
+  @@index([projectId])
+  @@index([authorId])
+}
+
+model Document {
+  id           String     @id @default(cuid())
+  storageKey   String     @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  visibility   Visibility @default(PRIVATE)
+  ownerId      String?
+  owner        User?      @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  challengeId  String?
+  challenge    Challenge? @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedById String?
+  uploadedBy   User?      @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+
+  @@index([ownerId])
+  @@index([challengeId])
+  @@index([projectId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}

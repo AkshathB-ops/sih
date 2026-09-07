@@ -168,23 +168,24 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  sessions           Session[]
-  challenges         Challenge[]
-  reviews            ChallengeReview[]
-  assignmentsMade    ChallengeAssignment[]    @relation("Assigner")
-  statusHistory      ChallengeStatusHistory[]
-  projectsOwned      Project[]                @relation("ProjectOwner")
-  projectMemberships ProjectMember[]
-  proposals          Proposal[]
-  notifications      Notification[]
-  comments           Comment[]
-  documentsUploaded  Document[]               @relation("DocumentUploader")
-  documentsOwned     Document[]               @relation("DocumentOwner")
-  auditLogs          AuditLog[]
-  faculty            Faculty?
-  student            Student?
-  challengeEvidences ChallengeEvidence[]
-  milestones         Milestone[]
+  sessions                Session[]
+  challenges              Challenge[]
+  reviews                 ChallengeReview[]
+  assignmentsMade         ChallengeAssignment[]    @relation("Assigner")
+  organizationMemberships OrganizationMember[]
+  statusHistory           ChallengeStatusHistory[]
+  projectsOwned           Project[]                @relation("ProjectOwner")
+  projectMemberships      ProjectMember[]
+  proposals               Proposal[]
+  notifications           Notification[]
+  comments                Comment[]
+  documentsUploaded       Document[]               @relation("DocumentUploader")
+  documentsOwned          Document[]               @relation("DocumentOwner")
+  auditLogs               AuditLog[]
+  faculty                 Faculty?
+  student                 Student?
+  challengeEvidences      ChallengeEvidence[]
+  milestones              Milestone[]
 
   @@index([role])
 }
@@ -234,6 +235,7 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   departments          UniversityDepartment[]
+  members              OrganizationMember[]
   faculty              Faculty[]
   students             Student[]
   assignedChallenges   Challenge[]             @relation("AssignedOrg")
@@ -255,6 +257,20 @@ model UniversityDepartment {
   researchAreas  String[]
 
   @@index([organizationId])
+}
+
+// Links any user to an organization (e.g. an INDUSTRY user to their company).
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  designation    String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([userId])
 }
 
 model Faculty {
@@ -313,6 +329,12 @@ model Challenge {
   priority               ChallengePriority @default(MEDIUM)
   assignedOrganizationId String?
   assignedOrganization   Organization?     @relation("AssignedOrg", fields: [assignedOrganizationId], references: [id], onDelete: SetNull)
+
+  // Optional AI-derived metadata. Always null when no AI provider is configured.
+  aiClassification Json?
+  aiDuplicateMeta  Json?
+  aiPriority       Json?
+  aiSummary        String?
 
   submittedAt DateTime?
   reviewedAt  DateTime?
@@ -527,6 +549,7 @@ model IndustryCollaboration {
   createdAt      DateTime                    @default(now())
   updatedAt      DateTime                    @updatedAt
 
+  @@unique([organizationId, challengeId])
   @@index([organizationId])
   @@index([status])
   @@index([projectId])

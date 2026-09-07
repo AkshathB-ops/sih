@@ -1,0 +1,10 @@
+import { handle, ok } from "@/lib/api/response";
+import { requireUser } from "@/server/auth/session.service";
+import { recommendUniversities } from "@/server/matching/matching.service";
+
+export const GET = handle(async (_request: Request, ctx) => {
+  const { id } = await ctx.params;
+  await requireUser();
+  const rankings = await recommendUniversities(id);
+  return ok({ rankings });
+});
